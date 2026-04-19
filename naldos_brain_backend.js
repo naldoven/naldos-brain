@@ -12,9 +12,7 @@ app.use(bodyParser.urlencoded({ extended: false }));
 app.use(bodyParser.json());
 
 // Initialize Anthropic client
-const anthropic = new Anthropic({
-  apiKey: process.env.ANTHROPIC_API_KEY
-});
+const anthropic = new Anthropic();
 
 // Twilio credentials
 const twilio_account_sid = process.env.TWILIO_ACCOUNT_SID;
@@ -273,7 +271,28 @@ app.get('/health', (req, res) => {
   res.json({ status: 'ok' });
 });
 
+// Validate required environment variables
+const requiredEnvVars = [
+  'ANTHROPIC_API_KEY',
+  'TWILIO_ACCOUNT_SID',
+  'TWILIO_AUTH_TOKEN',
+  'TWILIO_WHATSAPP_NUMBER',
+  'NALDO_EMAIL',
+  'EMAIL_USER',
+  'EMAIL_PASSWORD'
+];
+
+const missingEnvVars = requiredEnvVars.filter(envVar => !process.env[envVar]);
+
+if (missingEnvVars.length > 0) {
+  console.error('❌ Missing required environment variables:');
+  missingEnvVars.forEach(envVar => console.error(`   - ${envVar}`));
+  process.exit(1);
+}
+
 const PORT = process.env.PORT || 3000;
 app.listen(PORT, () => {
-  console.log(`Naldo's Brain backend running on port ${PORT}`);
+  console.log(`✅ Naldo's Brain backend running on port ${PORT}`);
+  console.log(`📱 WhatsApp webhook ready at: /whatsapp`);
+  console.log(`🧠 Dashboard API ready at: /api/captures`);
 });
