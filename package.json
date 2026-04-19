@@ -1,0 +1,28 @@
+{
+  "name": "naldos-brain",
+  "version": "1.0.0",
+  "description": "Naldo's Second Brain - WhatsApp-powered task and idea capture with AI feedback",
+  "main": "naldos_brain_backend.js",
+  "scripts": {
+    "start": "node naldos_brain_backend.js",
+    "dev": "nodemon naldos_brain_backend.js"
+  },
+  "keywords": ["whatsapp", "twilio", "claude", "ai", "task-management"],
+  "author": "Naldo",
+  "license": "MIT",
+  "dependencies": {
+    "express": "^4.18.2",
+    "body-parser": "^1.20.2",
+    "twilio": "^3.77.0",
+    "@anthropic-ai/sdk": "^0.5.0",
+    "nodemailer": "^6.9.1",
+    "node-cron": "^3.0.2",
+    "dotenv": "^16.0.3"
+  },
+  "devDependencies": {
+    "nodemon": "^2.0.20"
+  },
+  "engines": {
+    "node": "18.x"
+  }
+}
