@@ -25,7 +25,20 @@ if (!process.env.TWILIO_ACCOUNT_SID || !process.env.TWILIO_AUTH_TOKEN) {
 // Twilio credentials
 const twilio_account_sid = process.env.TWILIO_ACCOUNT_SID;
 const twilio_auth_token = process.env.TWILIO_AUTH_TOKEN;
-const twilio_whatsapp_number = process.env.TWILIO_WHATSAPP_NUMBER;
+
+// Normalize the WhatsApp "from" number once: strip spaces, guarantee leading +.
+// Twilio rejects `whatsapp:+1 631 634 6178` (spaces) — it must be `whatsapp:+16316346178`.
+function normalizeWhatsappNumber(raw) {
+  if (!raw) return null;
+  const digits = raw.replace(/\D/g, '');
+  return `whatsapp:+${digits}`;
+}
+const TWILIO_WHATSAPP_FROM = normalizeWhatsappNumber(process.env.TWILIO_WHATSAPP_NUMBER);
+
+if (!TWILIO_WHATSAPP_FROM) {
+  console.error('❌ Missing or invalid TWILIO_WHATSAPP_NUMBER');
+  process.exit(1);
+}
 
 const client = twilio(twilio_account_sid, twilio_auth_token);
 
@@ -100,7 +113,7 @@ Respond in JSON format ONLY:
     }
 
     const message = await anthropic.messages.create({
-      model: 'claude-opus-4-1',
+      model: 'claude-haiku-4-5-20251001',
       max_tokens: 1024,
       system: systemPrompt,
       messages: [
@@ -114,9 +127,15 @@ Respond in JSON format ONLY:
     console.log('✅ Claude responded');
 
     const responseText = message.content[0].type === 'text' ? message.content[0].text : '';
-    console.log('📝 Parsing response:', responseText.substring(0, 100) + '...');
-    
-    const parsed = JSON.parse(responseText);
+    console.log('📝 Parsing response:', responseText.substring(0, 200));
+
+    // Strip markdown code fences if Claude wrapped the JSON in ```json ... ```
+    const jsonText = responseText
+      .replace(/^\s*```(?:json)?\s*/i, '')
+      .replace(/\s*```\s*$/i, '')
+      .trim();
+
+    const parsed = JSON.parse(jsonText);
     
     // Add timestamp and ID
     const capture = {
@@ -141,13 +160,10 @@ Respond in JSON format ONLY:
       replyMessage += `\n\nNeed clarity:\n` + parsed.clarifyingQuestions.map((q, i) => `${i+1}. ${q}`).join('\n');
     }
 
-    const whatsappNumber = process.env.TWILIO_WHATSAPP_NUMBER.replace(/\s+/g, '').replace('+', '');
-    const formattedNumber = `whatsapp:+${whatsappNumber}`;
-    
     console.log(`📤 Sending response to ${fromNumber}`);
 
     await client.messages.create({
-      from: formattedNumber,
+      from: TWILIO_WHATSAPP_FROM,
       to: `whatsapp:${fromNumber}`,
       body: replyMessage
     });
@@ -155,11 +171,15 @@ Respond in JSON format ONLY:
     return capture;
   } catch (error) {
     console.error('Error processing message:', error);
-    await client.messages.create({
-      from: `whatsapp:${twilio_whatsapp_number}`,
-      to: `whatsapp:${fromNumber}`,
-      body: '❌ Error processing your message. Try again or be more specific.'
-    });
+    try {
+      await client.messages.create({
+        from: TWILIO_WHATSAPP_FROM,
+        to: `whatsapp:${fromNumber}`,
+        body: `❌ Error processing your message: ${error.message || 'unknown error'}`
+      });
+    } catch (sendErr) {
+      console.error('Error sending error reply:', sendErr);
+    }
     throw error;
   }
 }
@@ -248,34 +268,35 @@ async function sendDigest(email, subject, body) {
   }
 }
 
-// Schedule morning digest (8 AM)
+// Schedule morning digest (8 AM ET)
 cron.schedule('0 8 * * *', async () => {
   console.log('Generating morning digest...');
   const digest = await generateMorningDigest();
   await sendDigest(process.env.NALDO_EMAIL, '🌅 Naldo\'s Brain - Morning Digest', digest);
-});
+}, { timezone: 'America/New_York' });
 
-// Schedule night digest (10 PM)
+// Schedule night digest (10 PM ET)
 cron.schedule('0 22 * * *', async () => {
   console.log('Generating night digest...');
   const digest = await generateNightDigest();
   await sendDigest(process.env.NALDO_EMAIL, '🌙 Naldo\'s Brain - Night Digest', digest);
-});
+}, { timezone: 'America/New_York' });
 
-// WhatsApp webhook
-app.post('/whatsapp', async (req, res) => {
+// WhatsApp webhook. Twilio expects a reply within ~15s and retries on non-2xx,
+// so ack immediately and do the Claude call asynchronously. The WhatsApp reply
+// is sent via the REST API inside processMessage.
+app.post('/whatsapp', (req, res) => {
   const incomingMessage = req.body.Body;
-  const fromNumber = req.body.From.replace('whatsapp:', '');
+  const fromRaw = req.body.From || '';
+  const fromNumber = fromRaw.replace('whatsapp:', '');
 
   console.log(`Message from ${fromNumber}: ${incomingMessage}`);
 
-  try {
-    await processMessage(incomingMessage, fromNumber);
-    res.send('<Response></Response>');
-  } catch (error) {
-    console.error('Error:', error);
-    res.status(500).send('Error processing message');
-  }
+  res.set('Content-Type', 'text/xml').send('<Response></Response>');
+
+  processMessage(incomingMessage, fromNumber).catch((err) => {
+    console.error('Background processMessage failed:', err);
+  });
 });
 
 // Dashboard data API
