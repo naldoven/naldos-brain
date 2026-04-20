@@ -92,6 +92,13 @@ Respond in JSON format ONLY:
 }`;
 
   try {
+    console.log('🤖 Processing message with Claude...');
+    
+    if (!anthropic) {
+      console.error('❌ Anthropic client not initialized');
+      throw new Error('Anthropic client not initialized');
+    }
+
     const message = await anthropic.messages.create({
       model: 'claude-opus-4-1',
       max_tokens: 1024,
@@ -104,7 +111,11 @@ Respond in JSON format ONLY:
       ]
     });
 
+    console.log('✅ Claude responded');
+
     const responseText = message.content[0].type === 'text' ? message.content[0].text : '';
+    console.log('📝 Parsing response:', responseText.substring(0, 100) + '...');
+    
     const parsed = JSON.parse(responseText);
     
     // Add timestamp and ID
@@ -126,12 +137,17 @@ Respond in JSON format ONLY:
       replyMessage += `\n\n🤔 Real talk: ${parsed.pushback}`;
     }
     
-    if (parsed.clarifyingQuestions.length > 0) {
+    if (parsed.clarifyingQuestions && parsed.clarifyingQuestions.length > 0) {
       replyMessage += `\n\nNeed clarity:\n` + parsed.clarifyingQuestions.map((q, i) => `${i+1}. ${q}`).join('\n');
     }
 
+    const whatsappNumber = process.env.TWILIO_WHATSAPP_NUMBER.replace(/\s+/g, '').replace('+', '');
+    const formattedNumber = `whatsapp:+${whatsappNumber}`;
+    
+    console.log(`📤 Sending response to ${fromNumber}`);
+
     await client.messages.create({
-      from: `whatsapp:${twilio_whatsapp_number}`,
+      from: formattedNumber,
       to: `whatsapp:${fromNumber}`,
       body: replyMessage
     });
