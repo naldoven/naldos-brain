@@ -14,6 +14,14 @@ app.use(bodyParser.json());
 // Initialize Anthropic client
 const anthropic = new Anthropic();
 
+// Validate Twilio credentials exist
+if (!process.env.TWILIO_ACCOUNT_SID || !process.env.TWILIO_AUTH_TOKEN) {
+  console.error('❌ Missing Twilio credentials!');
+  console.error('   TWILIO_ACCOUNT_SID:', process.env.TWILIO_ACCOUNT_SID ? '✓' : '✗');
+  console.error('   TWILIO_AUTH_TOKEN:', process.env.TWILIO_AUTH_TOKEN ? '✓' : '✗');
+  process.exit(1);
+}
+
 // Twilio credentials
 const twilio_account_sid = process.env.TWILIO_ACCOUNT_SID;
 const twilio_auth_token = process.env.TWILIO_AUTH_TOKEN;
@@ -271,24 +279,12 @@ app.get('/health', (req, res) => {
   res.json({ status: 'ok' });
 });
 
-// Validate required environment variables
-const requiredEnvVars = [
-  'ANTHROPIC_API_KEY',
-  'TWILIO_ACCOUNT_SID',
-  'TWILIO_AUTH_TOKEN',
-  'TWILIO_WHATSAPP_NUMBER',
-  'NALDO_EMAIL',
-  'EMAIL_USER',
-  'EMAIL_PASSWORD'
-];
-
-const missingEnvVars = requiredEnvVars.filter(envVar => !process.env[envVar]);
-
-if (missingEnvVars.length > 0) {
-  console.error('❌ Missing required environment variables:');
-  missingEnvVars.forEach(envVar => console.error(`   - ${envVar}`));
-  process.exit(1);
-}
+// Log environment variables on startup (for debugging)
+console.log('🔍 Environment Check:');
+console.log('   TWILIO_ACCOUNT_SID:', process.env.TWILIO_ACCOUNT_SID ? '✓ SET' : '✗ MISSING');
+console.log('   TWILIO_AUTH_TOKEN:', process.env.TWILIO_AUTH_TOKEN ? '✓ SET' : '✗ MISSING');
+console.log('   ANTHROPIC_API_KEY:', process.env.ANTHROPIC_API_KEY ? '✓ SET' : '✗ MISSING');
+console.log('   EMAIL_USER:', process.env.EMAIL_USER ? '✓ SET' : '✗ MISSING');
 
 const PORT = process.env.PORT || 3000;
 app.listen(PORT, () => {
